@@ -1,0 +1,13 @@
+﻿<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <version>0.00</version>
+    <authors>Consortio Fashion Group AB</authors>
+    <owners>Consortio Fashion Group AB</owners>
+    <id>LogPipe.Service</id>
+    <title>LogPipe.Service</title>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Log Pipe Service is used to collect log data and index in centralized storage.</description>
+    <copyright>Consortio Fashion Group AB 2013</copyright>
+  </metadata>
+</package>
