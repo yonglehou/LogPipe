@@ -45,12 +45,22 @@ The event object will in addition to the original log entry contain information 
 ####Filters
 Filters are used to manipulate the raw message of a log entry. It can replace/transform the original message or it can extract parts of the message to fields or tags. Fields and tags are much easiser to search, filter and drilldown on when browsing your logs in Elasticsearch/Kibana.
 
+All filters can contain a condition element used to determine which events should be processed by the filter:
+```
+<Conditions>
+  <Type>myapp</Type>
+  <Expression Match="Field.MyField">.*</Expression>
+</Conditions>
+```
+Type is the input type name which must match and expression is a regex which must match for the filter to be applied. "Expression/@Match" can be the message, source or any field property of the event object and the property value is matched against the regex. If "Expression/@Match" is left out the default is to match on is the message property.
+User defined patterns can be used within the regex to simplify the expression. See below for more information on patterns.
+
 LogPipe currently has 4 built-in filters:
 
-* ExtractTimestampFilter - Trys to extract a datetime from the log message. 2013-09-19 12:04:56Z for UTC, 2013-09-19 12:04:56 for local time. The extracted value will be parsed using DateTime.ParseExact(value, "yyyy-MM-dd HH:mm:ssK", DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal) and saved event.Timestamp and a field called "event_time".
-* MatchFilter
-* DropFilter
-* MultiLineFilter
+* <b>ExtractTimestampFilter</b> - Trys to extract a datetime from the log message. 2013-09-19 12:04:56Z for UTC time, 2013-09-19 12:04:56 for local time. The extracted value will be parsed and saved as UTC in event.Timestamp and in a field called "event_time".
+* <b>MatchFilter</b> - Will be applied to matching event objects and can contain actions to be performed. Valid actions are AddField, RemoveField, AddTag, RemoveTag, ExtractFields, Replace and Remove.
+* <b>DropFilter</b> - Will drop the event if matched.
+* <b>MultiLineFilter</b> - Used to concatenate log entries that stretches over multiple lines. The condition should match the begining (the first line) of each event.
 
 ####Outputs
 LogPipe only has a single output which stores the events in ElasticSearch. The events will be stored using the same format as Logstash making all data readable by Kibana. 
@@ -135,3 +145,98 @@ Configuration can be found in App.config of the Log Pipe Service project.
   </Output>
 </LogPipe>
 ```
+
+####Patterns
+```
+<LogPipe>
+  <Patterns>
+    <Pattern Name="USERNAME"><![CDATA[[a-zA-Z0-9_-]+]]></Pattern>
+    <Pattern Name="USER"><![CDATA[%{USERNAME}]]></Pattern>
+    <Pattern Name="INT"><![CDATA[(?:[+-]?(?:[0-9]+))]]></Pattern>
+    <Pattern Name="BASE10NUM"><![CDATA[(?<![0-9.+-])(?>[+-]?(?:(?:[0-9]+(?:\.[0-9]+)?)|(?:\.[0-9]+)))]]></Pattern>
+    <Pattern Name="NUMBER"><![CDATA[(?:%{BASE10NUM})]]></Pattern>
+    <Pattern Name="BASE16NUM"><![CDATA[(?<![0-9A-Fa-f])(?:[+-]?(?:0x)?(?:[0-9A-Fa-f]+))]]></Pattern>
+    <Pattern Name="BASE16FLOAT"><![CDATA[\b(?<![0-9A-Fa-f.])(?:[+-]?(?:0x)?(?:(?:[0-9A-Fa-f]+(?:\.[0-9A-Fa-f]*)?)|(?:\.[0-9A-Fa-f]+)))\b]]></Pattern>
+
+    <Pattern Name="POSINT"><![CDATA[\b(?:[1-9][0-9]*)\b]]></Pattern>
+    <Pattern Name="NONNEGINT"><![CDATA[\b(?:[0-9]+)\b]]></Pattern>
+    <Pattern Name="WORD"><![CDATA[\b\w+\b]]></Pattern>
+    <Pattern Name="NOTSPACE"><![CDATA[\S+]]></Pattern>
+    <Pattern Name="SPACE"><![CDATA[\s*]]></Pattern>
+    <Pattern Name="DATA"><![CDATA[.*?]]></Pattern>
+    <Pattern Name="GREEDYDATA"><![CDATA[.*]]></Pattern>
+    <Pattern Name="QUOTEDSTRING"><![CDATA[(?>(?<!\\)(?>"(?>\\.|[^\\"]+)+"|""|(?>'(?>\\.|[^\\']+)+')|''|(?>`(?>\\.|[^\\`]+)+`)|``))]]></Pattern>
+    <Pattern Name="UUID"><![CDATA[[A-Fa-f0-9]{8}-(?:[A-Fa-f0-9]{4}-){3}[A-Fa-f0-9]{12}]]></Pattern>
+
+    <!-- Networking -->
+    <Pattern Name="MAC"><![CDATA[(?:%{CISCOMAC}|%{WINDOWSMAC}|%{COMMONMAC})]]></Pattern>
+    <Pattern Name="CISCOMAC"><![CDATA[(?:(?:[A-Fa-f0-9]{4}\.){2}[A-Fa-f0-9]{4})]]></Pattern>
+    <Pattern Name="WINDOWSMAC"><![CDATA[(?:(?:[A-Fa-f0-9]{2}-){5}[A-Fa-f0-9]{2})]]></Pattern>
+    <Pattern Name="COMMONMAC"><![CDATA[(?:(?:[A-Fa-f0-9]{2}:){5}[A-Fa-f0-9]{2})]]></Pattern>
+    <Pattern Name="IP"><![CDATA[(?<![0-9])(?:(?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2})[.](?:25[0-5]|2[0-4][0-9]|[0-1]?[0-9]{1,2}))(?![0-9])]]></Pattern>
+    <Pattern Name="HOSTNAME"><![CDATA[\b(?:[0-9A-Za-z][0-9A-Za-z-]{0,62})(?:\.(?:[0-9A-Za-z][0-9A-Za-z-]{0,62}))*(\.?|\b)]]></Pattern>
+    <Pattern Name="HOST"><![CDATA[%{HOSTNAME}]]></Pattern>
+    <Pattern Name="IPORHOST"><![CDATA[(?:%{HOSTNAME}|%{IP})]]></Pattern>
+    <Pattern Name="HOSTPORT"><![CDATA[(?:%{IPORHOST=~/\./}:%{POSINT})]]></Pattern>
+
+    <!-- Paths -->
+    <Pattern Name="PATH"><![CDATA[(?:%{UNIXPATH}|%{WINPATH})]]></Pattern>
+    <Pattern Name="UNIXPATH"><![CDATA[(?>/(?>[\w_%!$@:.,-]+|\\.)*)+]]></Pattern>
+    <Pattern Name="LINUXTTY"><![CDATA[(?>/dev/pts/%{NONNEGINT})]]></Pattern>
+    <Pattern Name="BSDTTY"><![CDATA[(?>/dev/tty[pq][a-z0-9])]]></Pattern>
+    <Pattern Name="TTY"><![CDATA[(?:%{BSDTTY}|%{LINUXTTY})]]></Pattern>
+    <Pattern Name="WINPATH"><![CDATA[(?>[A-Za-z]+:|\\)(?:\\[^\\?*]*)+]]></Pattern>
+    <Pattern Name="URIPROTO"><![CDATA[[A-Za-z]+(\+[A-Za-z+]+)?]]></Pattern>
+    <Pattern Name="URIHOST"><![CDATA[%{IPORHOST}(?::%{POSINT:port})?]]></Pattern>
+    <!-- uripath comes loosely from RFC1738, but mostly from what Firefox doesn't turn into %XX -->
+    <Pattern Name="URIPATH"><![CDATA[(?:/[A-Za-z0-9$.+!*'(){},~:;=#%_-]*)+]]></Pattern>
+    <Pattern Name="URIPARAM"><![CDATA[\?[A-Za-z0-9$.+!*'|(){},~#%&/=:;_?-\[\]]*]]></Pattern>
+    <Pattern Name="URIPATHPARAM"><![CDATA[%{URIPATH}(?:%{URIPARAM})?]]></Pattern>
+    <Pattern Name="URI"><![CDATA[%{URIPROTO}://(?:%{USER}(?::[^@]*)?@)?(?:%{URIHOST})?(?:%{URIPATHPARAM})?]]></Pattern>
+
+    <!-- Months: January, Feb, 3, 03, 12, December -->
+    <Pattern Name="MONTH"><![CDATA[\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b]]></Pattern>
+    <Pattern Name="MONTHNUM"><![CDATA[(?:0?[1-9]|1[0-2])]]></Pattern>
+    <Pattern Name="MONTHDAY"><![CDATA[(?:(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9])]]></Pattern>
+
+    <!-- Days: Monday, Tue, Thu, etc... -->
+    <Pattern Name="DAY"><![CDATA[(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)]]></Pattern>
+    <Pattern Name="YEAR"><![CDATA[(?>\d\d){1,2}]]></Pattern>
+    <Pattern Name="HOUR"><![CDATA[(?:2[0123]|[01][0-9])]]></Pattern>
+    <Pattern Name="MINUTE"><![CDATA[(?:[0-5][0-9])]]></Pattern>
+    <!-- '60' is a leap second in most time standards and thus is valid. -->
+    <Pattern Name="SECOND"><![CDATA[(?:(?:[0-5][0-9]|60)(?:[.,][0-9]+)?)]]></Pattern>
+    <Pattern Name="TIME"><![CDATA[(?!<[0-9])%{HOUR}:%{MINUTE}(?::%{SECOND})(?![0-9])]]></Pattern>
+    <!-- datestamp is YYYY/MM/DD-HH:MM:SS.UUUU (or something like it) -->
+    <Pattern Name="DATE_US"><![CDATA[%{MONTHNUM}[/-]%{MONTHDAY}[/-]%{YEAR}]]></Pattern>
+    <Pattern Name="DATE_EU"><![CDATA[%{YEAR}[/-]%{MONTHNUM}[/-]%{MONTHDAY}]]></Pattern>
+    <Pattern Name="ISO8601_TIMEZONE"><![CDATA[(?:Z|[+-]%{HOUR}(?::?%{MINUTE}))]]></Pattern>
+    <Pattern Name="ISO8601_SECOND"><![CDATA[(?:%{SECOND}|60)]]></Pattern>
+    <Pattern Name="TIMESTAMP_ISO8601"><![CDATA[%{YEAR}-%{MONTHNUM}-%{MONTHDAY}[T ]%{HOUR}:?%{MINUTE}(?::?%{SECOND})?%{ISO8601_TIMEZONE}?]]></Pattern>
+    <Pattern Name="DATE"><![CDATA[%{DATE_US}|%{DATE_EU}]]></Pattern>
+    <Pattern Name="DATESTAMP"><![CDATA[%{DATE}[- ]%{TIME}]]></Pattern>
+    <Pattern Name="TZ"><![CDATA[(?:[PMCE][SD]T)]]></Pattern>
+    <Pattern Name="DATESTAMP_RFC822"><![CDATA[%{DAY} %{MONTH} %{MONTHDAY} %{YEAR} %{TIME} %{TZ}]]></Pattern>
+    <Pattern Name="DATESTAMP_OTHER"><![CDATA[%{DAY} %{MONTH} %{MONTHDAY} %{TIME} %{TZ} %{YEAR}]]></Pattern>
+
+    <!-- Syslog Dates: Month Day HH:MM:SS -->
+    <Pattern Name="SYSLOGTIMESTAMP"><![CDATA[%{MONTH} +%{MONTHDAY} %{TIME}]]></Pattern>
+    <Pattern Name="PROG"><![CDATA[(?:[\w._/%-]+)]]></Pattern>
+    <Pattern Name="SYSLOGPROG"><![CDATA[%{PROG:program}(?:\[%{POSINT:pid}\])?]]></Pattern>
+    <Pattern Name="SYSLOGHOST"><![CDATA[%{IPORHOST}]]></Pattern>
+    <Pattern Name="SYSLOGFACILITY"><![CDATA[<%{NONNEGINT:facility}.%{NONNEGINT:priority}>]]></Pattern>
+    <Pattern Name="HTTPDATE"><![CDATA[%{MONTHDAY}/%{MONTH}/%{YEAR}:%{TIME} %{INT}]]></Pattern>
+
+    <!-- Shortcuts -->
+    <Pattern Name="QS"><![CDATA[%{QUOTEDSTRING}]]></Pattern>
+
+    <!-- Log formats -->
+    <Pattern Name="SYSLOGBASE"><![CDATA[%{SYSLOGTIMESTAMP:timestamp} (?:%{SYSLOGFACILITY} )?%{SYSLOGHOST:logsource} %{SYSLOGPROG}:]]></Pattern>
+    <Pattern Name="COMBINEDAPACHELOG"><![CDATA[%{IPORHOST:clientip} %{USER:ident} %{USER:auth} \[%{HTTPDATE:timestamp}\] "(?:%{WORD:verb} %{NOTSPACE:request}(?: HTTP/%{NUMBER:httpversion})?|-)" %{NUMBER:response} (?:%{NUMBER:bytes}|-) %{QS:referrer} %{QS:agent}]]></Pattern>
+
+    <!-- Log Levels -->
+    <Pattern Name="LOGLEVEL"><![CDATA[([T|t]race|TRACE|[D|d]ebug|DEBUG|[N|n]otice|NOTICE|[I|i]nfo|INFO|[W|w]arn?(?:ing)?|WARN?(?:ING)?|[E|e]rr?(?:or)?|ERR?(?:OR)?|[C|c]rit?(?:ical)?|CRIT?(?:ICAL)?|[F|f]atal|FATAL|[S|s]evere|SEVERE)]]></Pattern>
+  </Patterns>
+</LogPipe>
+  ```
+  
